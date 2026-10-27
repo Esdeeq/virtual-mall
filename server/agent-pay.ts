@@ -23,7 +23,7 @@ import {
 import { privateKeyToAccount } from 'viem/accounts';
 import { getUsdc, requireChain } from '../src/onchain-facts';
 
-const ARC_CHAIN_ID = 5042002;
+const ARC_CHAIN_ID = process.env.VITE_ARC_MAINNET === 'true' ? 5042 : 5042002;
 
 // Minimal ERC-20 ABI for transfer + balanceOf
 const ERC20_ABI = [

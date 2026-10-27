@@ -6,6 +6,10 @@
 
 import { createContext, useContext, useState, useEffect, useCallback, useRef, type ReactNode } from 'react';
 import { W3SSdk } from '@circle-fin/w3s-pw-web-sdk';
+import { IS_MAINNET } from '../chain-config';
+
+// Circle blockchain string for the active network
+const ACTIVE_BLOCKCHAIN = IS_MAINNET ? 'ARC' : 'ARC-TESTNET';
 
 const CIRCLE_APP_ID = import.meta.env.VITE_CIRCLE_APP_ID as string;
 
@@ -87,14 +91,22 @@ export function UserWalletProvider({ children }: { children: ReactNode }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ walletId: wId, userToken: tok }),
       });
-      const data = await resp.json() as { ok: boolean; error?: string; tokenBalances?: { amount: string; token: { symbol: string } }[] };
+      const data = await resp.json() as { ok: boolean; error?: string; tokenBalances?: { amount: string; token: { symbol: string; blockchain?: string; isNative?: boolean } }[] };
       if (!data.ok && data.error?.includes('expired') && userId) {
         // Token expired — refresh and retry once
         const newTok = await refreshToken(userId);
         if (newTok) { await loadBalance(wId, newTok); return; }
       }
       if (data.ok && data.tokenBalances) {
-        const usdc = data.tokenBalances.find(b => b.token.symbol === 'USDC');
+        // Pick USDC on the active blockchain — prefer native token (gas = USDC on Arc)
+        const usdc = data.tokenBalances.find(b =>
+          b.token.symbol === 'USDC' &&
+          (b.token.blockchain === ACTIVE_BLOCKCHAIN || !b.token.blockchain)
+          && b.token.isNative === true
+        ) ?? data.tokenBalances.find(b =>
+          b.token.symbol === 'USDC' &&
+          (b.token.blockchain === ACTIVE_BLOCKCHAIN || !b.token.blockchain)
+        ) ?? data.tokenBalances.find(b => b.token.symbol === 'USDC');
         setUsdcBalance(usdc ? parseFloat(usdc.amount).toFixed(2) : '0.00');
       }
     } catch { /* silent */ }
@@ -115,7 +127,8 @@ export function UserWalletProvider({ children }: { children: ReactNode }) {
         if (newTok) { await loadWallet(newTok); return; }
       }
       if (data.ok && data.wallets?.length) {
-        const w = data.wallets[0];
+        // Prefer the wallet on the active blockchain (mainnet vs testnet)
+        const w = data.wallets.find((wl: CircleWallet) => wl.blockchain === ACTIVE_BLOCKCHAIN) ?? data.wallets[0];
         setWallet(w);
         localStorage.setItem('vm_wallet', JSON.stringify(w));
         void loadBalance(w.id, tok);

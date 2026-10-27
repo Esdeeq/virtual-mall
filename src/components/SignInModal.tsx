@@ -6,7 +6,7 @@
 
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Mail, Loader2, CheckCircle, Wallet, AlertCircle, ShieldCheck } from 'lucide-react';
+import { X, Mail, Loader2, CheckCircle, Wallet, AlertCircle, ShieldCheck, LogOut } from 'lucide-react';
 import { TokenUSDC } from '@web3icons/react';
 import { useUserWallet } from '../context/UserWalletContext';
 
@@ -21,7 +21,7 @@ const CIRCLE_APP_ID = import.meta.env.VITE_CIRCLE_APP_ID as string;
 const APP_ID_SET = CIRCLE_APP_ID && CIRCLE_APP_ID !== 'your_app_id_here';
 
 export function SignInModal({ open, onClose }: SignInModalProps) {
-  const { signIn, executeChallenge, wallet, usdcBalance, isLoading, sdkReady, userId } = useUserWallet();
+  const { signIn, executeChallenge, signOut, wallet, usdcBalance, isLoading, sdkReady, userId } = useUserWallet();
 
   const [email, setEmail] = useState('');
   const [challengeId, setChallengeId] = useState<string | null>(null);
@@ -257,6 +257,14 @@ export function SignInModal({ open, onClose }: SignInModalProps) {
                     >
                       Done
                     </motion.button>
+
+                    <button
+                      onClick={() => { signOut(); setEmail(''); setError(null); setChallengeId(null); }}
+                      className="w-full py-2 rounded-2xl text-xs flex items-center justify-center gap-1.5"
+                      style={{ color: 'var(--muted)', background: 'transparent' }}
+                    >
+                      <LogOut size={12} /> Use a different account
+                    </button>
                   </div>
                 )}
 

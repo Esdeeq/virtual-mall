@@ -26,6 +26,9 @@
 
 import express from 'express';
 import cors from 'cors';
+import { existsSync } from 'fs';
+import { join } from 'path';
+import { fileURLToPath } from 'url';
 import { createGatewayMiddleware } from '@circle-fin/x402-batching/server';
 import { agentPay, getAgentWalletInfo } from './agent-pay';
 import {
@@ -314,7 +317,7 @@ app.post('/api/escrow/sign', express.json(), async (req, res) => {
     const { orderId, buyer, amount } = req.body as { orderId: string; buyer: string; amount: string; };
     if (!orderId || !buyer || !amount) { res.status(400).json({ ok: false, error: 'orderId, buyer, amount required' }); return; }
 
-    const CHAIN_ID = 5042002n;
+    const CHAIN_ID = BigInt(process.env.VITE_ARC_MAINNET === 'true' ? 5042 : 5042002);
     const ESCROW_ADDRESS = escrowAddr as `0x${string}`;
 
     const enc = (s: string) => toHex(new TextEncoder().encode(s));
@@ -383,7 +386,7 @@ app.post('/api/wallet/initialize', express.json(), async (req, res) => {
     if (!userToken) { res.status(400).json({ ok: false, error: 'userToken required' }); return; }
     const resp = await circleWalletClient.createUserPinWithWallets({
       userToken,
-      blockchains: [Blockchain.ArcTestnet],
+      blockchains: [process.env.VITE_ARC_MAINNET === 'true' ? Blockchain.Arc : Blockchain.ArcTestnet],
       accountType: 'SCA',
     });
     res.json({ ok: true, challengeId: resp.data?.challengeId });
@@ -462,6 +465,20 @@ app.post('/api/wallet/balance', express.json(), async (req, res) => {
     res.status(500).json({ ok: false, error: err instanceof Error ? err.message : String(err) });
   }
 });
+
+// ---------------------------------------------------------------------------
+// Static frontend (production build) + SPA catch-all
+// ---------------------------------------------------------------------------
+
+const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const distPath = join(__dirname, '../dist');
+if (existsSync(distPath)) {
+  app.use(express.static(distPath));
+  // SPA catch-all — serve index.html for any non-API route
+  app.get('*', (_req, res) => {
+    res.sendFile(join(distPath, 'index.html'));
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Start
