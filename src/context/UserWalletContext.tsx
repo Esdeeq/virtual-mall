@@ -32,7 +32,7 @@ interface UserWalletState {
   sdkReady: boolean;
   signIn: (userId: string) => Promise<{ challengeId?: string; alreadyInitialized?: boolean }>;
   executeChallenge: (challengeId: string) => Promise<void>;
-  loadWallet: () => Promise<void>;
+  loadWallet: (tokOverride?: string) => Promise<boolean | undefined>;
   signOut: () => void;
 }
 
@@ -46,7 +46,15 @@ export function UserWalletProvider({ children }: { children: ReactNode }) {
   const [userToken, setUserToken] = useState<string | null>(() => localStorage.getItem('vm_userToken'));
   const [encryptionKey, setEncKey] = useState<string | null>(() => localStorage.getItem('vm_encryptionKey'));
   const [wallet, setWallet] = useState<CircleWallet | null>(() => {
-    try { return (JSON.parse(localStorage.getItem('vm_wallet') ?? 'null') as CircleWallet | null); } catch { return null; }
+    try {
+      const cached = JSON.parse(localStorage.getItem('vm_wallet') ?? 'null') as CircleWallet | null;
+      // Discard cached wallet if it's on the wrong network (e.g. testnet wallet cached while app is now mainnet)
+      if (cached && cached.blockchain !== ACTIVE_BLOCKCHAIN) {
+        localStorage.removeItem('vm_wallet');
+        return null;
+      }
+      return cached;
+    } catch { return null; }
   });
   const [usdcBalance, setUsdcBalance] = useState('0.00');
   const [isLoading, setIsLoading] = useState(false);
@@ -126,12 +134,18 @@ export function UserWalletProvider({ children }: { children: ReactNode }) {
         const newTok = await refreshToken(userId);
         if (newTok) { await loadWallet(newTok); return; }
       }
-      if (data.ok && data.wallets?.length) {
-        // Prefer the wallet on the active blockchain (mainnet vs testnet)
-        const w = data.wallets.find((wl: CircleWallet) => wl.blockchain === ACTIVE_BLOCKCHAIN) ?? data.wallets[0];
-        setWallet(w);
-        localStorage.setItem('vm_wallet', JSON.stringify(w));
-        void loadBalance(w.id, tok);
+      if (data.ok) {
+        const wallets = data.wallets ?? [];
+        // Prefer wallet on active blockchain; if none exists, it will be created via initialize
+        const w = wallets.find((wl: CircleWallet) => wl.blockchain === ACTIVE_BLOCKCHAIN)
+          ?? (wallets.length ? wallets[0] : null);
+        if (w) {
+          setWallet(w);
+          localStorage.setItem('vm_wallet', JSON.stringify(w));
+          void loadBalance(w.id, tok);
+        }
+        // Return whether we found a mainnet wallet so caller can create one if needed
+        return wallets.some((wl: CircleWallet) => wl.blockchain === ACTIVE_BLOCKCHAIN);
       }
     } catch { /* silent */ }
   }, [userToken, userId, loadBalance, refreshToken]);
@@ -184,8 +198,19 @@ export function UserWalletProvider({ children }: { children: ReactNode }) {
       const initData = await initResp.json() as { ok: boolean; challengeId?: string; alreadyInitialized?: boolean };
 
       if (initData.alreadyInitialized) {
-        // Existing user — load their wallets immediately
-        await loadWallet();
+        // Existing user — load wallets and check if they have one on the active blockchain
+        const hasActiveWallet = await loadWallet(tok);
+        if (!hasActiveWallet) {
+          // User exists but has no wallet on this network (e.g. testnet user signing into mainnet)
+          // Re-initialize to create a wallet on the active blockchain
+          const reInitResp = await fetch('/api/wallet/initialize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userToken: tok }),
+          });
+          const reInitData = await reInitResp.json() as { ok: boolean; challengeId?: string; alreadyInitialized?: boolean };
+          if (reInitData.challengeId) return { challengeId: reInitData.challengeId };
+        }
         return { alreadyInitialized: true };
       }
       return { challengeId: initData.challengeId };

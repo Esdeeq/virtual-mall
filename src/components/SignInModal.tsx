@@ -27,6 +27,7 @@ export function SignInModal({ open, onClose }: SignInModalProps) {
   const [challengeId, setChallengeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
+  const [isNewUser, setIsNewUser] = useState<boolean | null>(null); // null = unknown, true = new, false = returning
 
   // Derive current step from state — no useEffect needed
   const step: Step = (() => {
@@ -42,8 +43,10 @@ export function SignInModal({ open, onClose }: SignInModalProps) {
     try {
       const result = await signIn(email);
       if (result.alreadyInitialized) {
-        // wallet is now loaded via context — derived step becomes 'done'
+        setIsNewUser(false);
+        // wallet loaded via context — derived step becomes 'done'
       } else if (result.challengeId) {
+        setIsNewUser(true);
         setChallengeId(result.challengeId); // derived step becomes 'pin_setup'
       }
     } catch (e) {
@@ -101,12 +104,14 @@ export function SignInModal({ open, onClose }: SignInModalProps) {
                   <Wallet size={26} style={{ color: '#fff' }} />
                 </div>
                 <h2 className="display text-xl font-bold" style={{ color: 'var(--ink)' }}>
-                  {step === 'done' ? 'Agent Wallet' : 'Sign In'}
+                  {step === 'done' ? 'Agent Wallet' : step === 'pin_setup' ? (isNewUser ? 'Create Account' : 'New Device Setup') : 'Sign In'}
                 </h2>
                 <p className="text-sm mt-1" style={{ color: 'var(--muted)' }}>
                   {step === 'done'
                     ? 'Your wallet is active'
-                    : 'Use your email to create or restore your agent wallet'}
+                    : step === 'pin_setup'
+                      ? (isNewUser ? 'Set a PIN to secure your new wallet' : 'Authorize this device with your PIN')
+                      : 'Enter your email — new users get a wallet, returning users restore theirs'}
                 </p>
                 <button onClick={onClose}
                   className="absolute top-4 right-4 w-8 h-8 rounded-full flex items-center justify-center"
@@ -183,8 +188,9 @@ export function SignInModal({ open, onClose }: SignInModalProps) {
                       <ShieldCheck size={32} className="mx-auto mb-2" style={{ color: '#6366f1' }} />
                       <p className="text-sm font-semibold" style={{ color: 'var(--ink)' }}>Set your wallet PIN</p>
                       <p className="text-xs mt-1" style={{ color: 'var(--muted)' }}>
-                        Click below to open Circle's secure PIN setup. You'll create a 6-digit PIN
-                        and answer security questions — only you will ever be able to access your wallet.
+                        {isNewUser
+                          ? "Click below to open Circle's secure PIN setup. You'll create a 6-digit PIN and answer security questions — only you can ever access your wallet."
+                          : "This email already has a wallet. Click below to authorize this device — you'll enter your existing PIN to restore access."}
                       </p>
                     </div>
 
@@ -202,7 +208,9 @@ export function SignInModal({ open, onClose }: SignInModalProps) {
                       className="w-full py-3 rounded-2xl text-sm font-bold text-white flex items-center justify-center gap-2"
                       style={{ background: 'linear-gradient(135deg,#6366f1,#8b5cf6)', opacity: executing ? 0.6 : 1 }}
                     >
-                      {executing ? <><Loader2 size={16} className="animate-spin" /> Opening PIN setup…</> : 'Set up PIN & Create Wallet'}
+                      {executing
+                        ? <><Loader2 size={16} className="animate-spin" /> Opening PIN setup…</>
+                        : isNewUser ? 'Set up PIN & Create Wallet' : 'Authorize This Device'}
                     </motion.button>
                   </div>
                 )}
@@ -259,7 +267,7 @@ export function SignInModal({ open, onClose }: SignInModalProps) {
                     </motion.button>
 
                     <button
-                      onClick={() => { signOut(); setEmail(''); setError(null); setChallengeId(null); }}
+                      onClick={() => { signOut(); setEmail(''); setError(null); setChallengeId(null); setIsNewUser(null); }}
                       className="w-full py-2 rounded-2xl text-xs flex items-center justify-center gap-1.5"
                       style={{ color: 'var(--muted)', background: 'transparent' }}
                     >
