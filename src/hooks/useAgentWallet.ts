@@ -72,7 +72,7 @@ export function useAgentWallet(): AgentWallet {
   const viemChain = chainMeta as unknown as Chain;
   const usdcFact = getUsdc(ARC_CHAIN_ID);
   const rpcUrlList = chainMeta.rpcUrls;
-  const rpcUrl = rpcUrlList[0] ?? 'https://rpc.testnet.arc.io';
+  const rpcUrl = rpcUrlList[0] ?? (ARC_CHAIN_ID === 5042 ? 'https://rpc.mainnet.arc.io' : 'https://rpc.testnet.arc.io');
 
   // Circle user-controlled wallet (if signed in)
   const circleCtx = useContext(UserWalletContext);
